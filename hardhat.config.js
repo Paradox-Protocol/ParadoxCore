@@ -1,0 +1,33 @@
+require('@nomiclabs/hardhat-etherscan');
+require('@openzeppelin/hardhat-upgrades');
+require("@nomicfoundation/hardhat-toolbox");
+require('hardhat-ethernal');
+
+/** @type import('hardhat/config').HardhatUserConfig */
+module.exports = {
+  solidity: {
+    version: "0.8.9",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 50
+      }
+    }
+  },
+  networks: {
+    rinkeby: {
+      url: ``,
+      accounts: [`${process.env.PRIVATE_KEY}`]
+    },
+    goerli: {
+      url: ``,
+      accounts: [`${process.env.PRIVATE_KEY}`]
+    }
+  },
+  etherscan: {
+    apiKey: {
+      rinkeby: "",
+      goerli: ""
+    }
+  }
+};
