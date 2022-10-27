@@ -238,6 +238,52 @@ const {
         await betting.connect(user).claimPayment(POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(4));
       });
+
+      it("Should allow users to claim winnings in case of tie - 2", async function () {
+        const { bettingAdmin, betting, erc1155, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
+
+        const teams2 = [...teams];
+        teams2.push({id: 3, name: "xyz", status: 0});
+
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS + 1, eventName, startTime, duration, erc1155.address, teams2);
+        await bettingAdmin.startPool(POOL_ID);
+
+        await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(2));
+        await betting.connect(user2).placeBet(POOL_ID, 1, convertToWei(3));
+        await betting.connect(user2).placeBet(POOL_ID, 2, convertToWei(4));
+        await betting.connect(user3).placeBet(POOL_ID, 3, convertToWei(5));
+        await betting.connect(user).placeBet(POOL_ID, 3, convertToWei(10));
+
+        const pool =  await bettingAdmin.getPool(POOL_ID);
+        expect(pool.totalAmount).to.equal(convertToWei(24));
+        expect(pool.totalBets).to.equal(5);
+
+        expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(24.22));
+
+        const userBets = await betting.getUserBets(user.address, POOL_ID);
+        expect(userBets[0]).to.equal(0);
+        expect(userBets[1]).to.equal(4);
+
+        expect(await erc1155.totalSupply(0)).to.equal(convertToWei(2));
+        expect(await erc1155.totalSupply(1)).to.equal(convertToWei(3));
+        expect(await erc1155.totalSupply(2)).to.equal(convertToWei(4));
+        expect(await erc1155.totalSupply(3)).to.equal(convertToWei(15));
+
+        await bettingAdmin.markPoolTie(POOL_ID, [2, 3]);
+
+        expect(await betting.totalPayouts(user.address, POOL_ID)).to.equal(convertToWei(toString(11.666666666666666666)));
+        expect(await betting.totalPayouts(user2.address, POOL_ID)).to.equal(convertToWei(toString(6.5)));
+        expect(await betting.totalPayouts(user3.address, POOL_ID)).to.equal(convertToWei(toString(5.833333333333333)));
+
+        await betting.connect(user2).claimPayment(POOL_ID);
+        expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(17.72));
+
+        await betting.connect(user).claimPayment(POOL_ID);
+        expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(6.05333333333333333));
+
+        await betting.connect(user3).claimPayment(POOL_ID);
+        expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(0.22));
+      });
   
     });
 

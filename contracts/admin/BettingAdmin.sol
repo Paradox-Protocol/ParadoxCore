@@ -155,7 +155,7 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     function transferCommissionToVault(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Decided");
-        require((pool.endTime + 30 days) >= block.timestamp, "Betting: Cannot transfer before 30 days deadline");
+        require((pool.endTime + 30 days) < block.timestamp, "Betting: Cannot transfer before 30 days deadline");
 
         uint256 _unclaimedCommission = pool.totalCommissions - pool.commissionsClaimed;
         usdcContract.transferFrom(betting, vaultContract, _unclaimedCommission);
@@ -167,7 +167,7 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     function transferPayoutToVault(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Decided");
-        require((pool.endTime + 90 days) >= block.timestamp, "Betting: Cannot transfer before 90 days deadline");
+        require((pool.endTime + 90 days) < block.timestamp, "Betting: Cannot transfer before 90 days deadline");
 
         uint256 _unclaimedPayout = pool.totalAmount - pool.payoutClaimed;
         usdcContract.transferFrom(betting, vaultContract, _unclaimedPayout);
@@ -176,16 +176,16 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     }
 
     // Allows admin to refund a single team in pool, making all bets placed on that team only eligible for refund
-    function refundTeam(uint256 poolId_, uint256 teamId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
-        // Remove player from pool and issue refund
-        Pool storage pool = pools[poolId_];
-        require(pool.status == PoolStatus.Running, "Betting: Pool status should be Running");
+    // function refundTeam(uint256 poolId_, uint256 teamId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+    //     // Remove player from pool and issue refund
+    //     Pool storage pool = pools[poolId_];
+    //     require(pool.status == PoolStatus.Running, "Betting: Pool status should be Running");
 
-        Team storage team = poolTeams[poolId_][teamId_];
-        team.status = TeamStatus.Refunded;
+    //     Team storage team = poolTeams[poolId_][teamId_];
+    //     team.status = TeamStatus.Refunded;
 
-        emit TeamRemoved(poolId_, teamId_);
-    }
+    //     emit TeamRemoved(poolId_, teamId_);
+    // }
 
     // Allows admin to update start time and duration of a pool
     function updateStartTime(uint256 poolId_, uint256 startTime_, uint256 duration_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {

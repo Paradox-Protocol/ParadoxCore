@@ -1,11 +1,9 @@
-require('dotenv').config()
-
 require('@nomiclabs/hardhat-etherscan');
 require('@openzeppelin/hardhat-upgrades');
 require("@nomicfoundation/hardhat-toolbox");
 
 /** @type import('hardhat/config').HardhatUserConfig */
-module.exports = {
+module.exports = {  
   solidity: {
     version: "0.8.9",
     settings: {

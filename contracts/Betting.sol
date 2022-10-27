@@ -132,7 +132,8 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     function placeBet(uint256 poolId_, uint256 teamId_, uint256 amount_) external validPool(poolId_) {
         Pool memory pool = getPool(poolId_);
         require(pool.status == PoolStatus.Running, "Betting: Pool status should be Created");
-        require(amount_ >= MIN_BET, "Amount should be more than MIN_BET");
+        require(amount_ >= MIN_BET, "Betting: Amount should be more than MIN_BET");
+        require(pool.startTime > block.timestamp, "Betting: Cannot place bet after pool start time");
 
         Team memory team = getPoolTeam(poolId_, teamId_);
         require(team.status == TeamStatus.Created, "Betting: Team status should be Created");
@@ -215,21 +216,21 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
     // Allows user to claim refund against a specific team in a pool
     // Refund is only transferred if team was removed by admin
-    function claimTeamRefund(uint256 poolId_, uint256 teamId_) external validPool(poolId_) {
-        Pool memory pool = getPool(poolId_);
-        address player = msg.sender;
+    // function claimTeamRefund(uint256 poolId_, uint256 teamId_) external validPool(poolId_) {
+    //     Pool memory pool = getPool(poolId_);
+    //     address player = msg.sender;
 
-        Team memory team = getPoolTeam(poolId_, teamId_);
-        require(team.status == TeamStatus.Refunded, "Betting: Team status should be Refunded");
+    //     Team memory team = getPoolTeam(poolId_, teamId_);
+    //     require(team.status == TeamStatus.Refunded, "Betting: Team status should be Refunded");
 
-        uint256 balance = pool.mintContract.balanceOf(player, teamId_);
-        require(balance > 0, "Betting: No refund to claim"); 
+    //     uint256 balance = pool.mintContract.balanceOf(player, teamId_);
+    //     require(balance > 0, "Betting: No refund to claim"); 
         
-        pool.mintContract.burn(player, teamId_, balance);
-        getUsdcContract().transfer(player, balance);
+    //     pool.mintContract.burn(player, teamId_, balance);
+    //     getUsdcContract().transfer(player, balance);
 
-        emit TeamRefundClaimed(poolId_, player, balance);
-    }
+    //     emit TeamRefundClaimed(poolId_, player, balance);
+    // }
 
     // Allows user to claim generated commission if any in a pool.
     function claimCommission(uint256 poolId_) external validPool(poolId_) {
@@ -331,18 +332,25 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
             return 0;
         }
 
+        uint256 _totalWinnings = 0;
+        for  (uint256 i = 0; i < pool.winners.length; i++) { 
+            _totalWinnings += pool.mintContract.totalSupply(pool.winners[i]);
+        }
+        _totalWinnings = pool.totalAmount - _totalWinnings;
+        uint256 _winningsPerTeam = _totalWinnings / pool.winners.length;
+
         uint256 _winningAmount = 0;
         for (uint256 i = 0; i < pool.winners.length; i++) {
             uint256 _teamBalance = pool.mintContract.totalSupply(pool.winners[i]);
             if (_teamBalance == 0) {
-                return 0;
+                continue;
             }
 
             uint256 _userBalance = pool.mintContract.balanceOf(who_, pool.winners[i]);
-            _winningAmount = _winningAmount + (((pool.totalAmount - _teamBalance) * _userBalance)/ _teamBalance) + _userBalance;
+            _winningAmount = _winningAmount + ((_winningsPerTeam * _userBalance)/ _teamBalance) + _userBalance;
         }
         
-        return _winningAmount / pool.winners.length;
+        return _winningAmount;
     }
 
     // Calculate refund eligible to claim by player in a pool
@@ -374,9 +382,10 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     // Calculate commission eligible to claim by player in a pool
     function _totalCommissionGenerated(address who_, uint256 poolId_) internal view returns(uint256) {
         Pool memory pool = getPool(poolId_);
-        // if (pool.status != PoolStatus.Decided) {
-        //     return 0;
-        // }
+        // We return commission when user claims refund
+        if (pool.status == PoolStatus.Canceled) {
+            return 0;
+        }
         // Mark all payments by user in this pool as available for refund
         uint256[] memory _userBets = userBets[poolId_][who_];
         if (_userBets.length == 0) {
