@@ -29,10 +29,10 @@ const {
     // and reset Hardhat Network to that snapshopt in every test.
     async function deployInitializeFixture() {
       // Contracts are deployed using the first signer/account by default
-      const startTime = await time.latest();
-      const duration = startTime + 1000;
+      const startTime = (await time.latest()) + 86400;
+      const duration = startTime + 86400;
       const eventName = "US Open";
-      const teams = [{id: 0, name: "Team1", status: 0}, {id: 1, name: "Team2", status: 0}, {id: 2, name: "Team3", status: 0}];
+      const teams = ["Team1", "Team2", "Team3"];
       const [owner, user, user2, user3] = await ethers.getSigners();
   
       const USDC = await ethers.getContractFactory("ERC20MockUpgradeable");
@@ -43,11 +43,11 @@ const {
       const v = await upgrades.deployProxy(VAULT);
       const vault = await v.deployed();
 
-      const ERC1155PresetMinterPauser = await ethers.getContractFactory("ERC1155PresetMinterPauser");
-      const erc1155 = await ERC1155PresetMinterPauser.deploy("test");
+      const ERC1155PresetMinterPauserUpgradeable = await ethers.getContractFactory("ERC1155PresetMinterPauserUpgradeable");
+      const erc1155 = await upgrades.deployProxy(ERC1155PresetMinterPauserUpgradeable, ["test"]);
       await erc1155.deployed();
 
-      const erc1155_2 = await ERC1155PresetMinterPauser.deploy("test 2");
+      const erc1155_2 = await upgrades.deployProxy(ERC1155PresetMinterPauserUpgradeable, ["test 2"]);
       await erc1155_2.deployed();
       
       const BettingAdmin = await ethers.getContractFactory("BettingAdmin");
@@ -243,7 +243,7 @@ const {
         const { bettingAdmin, betting, erc1155, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
 
         const teams2 = [...teams];
-        teams2.push({id: 3, name: "xyz", status: 0});
+        teams2.push("xyz");
 
         await bettingAdmin.createPool(NUMBER_OF_TEAMS + 1, eventName, startTime, duration, erc1155.address, teams2);
         await bettingAdmin.startPool(POOL_ID);

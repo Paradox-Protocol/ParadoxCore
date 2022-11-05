@@ -10,8 +10,9 @@ interface IBettingAdmin {
     function getPoolTeams(uint256 poolId_) external view returns(Storage.Team[] memory);
     function usdcContract() external view returns(IERC20Upgradeable);
     function signer() external view returns(address);
+    function vaultContract() external view returns(address);
     function getTotalPools() external view returns(uint256);
-    function placeBet(address player_, uint256 poolId_, uint256 teamId_, uint256 amount_, uint256 commission_) external returns(bool);
+    function betPlaced(address player_, uint256 poolId_, uint256 teamId_, uint256 amount_, uint256 commission_) external returns(bool);
     function payoutClaimed(address player_, uint256 poolId_, uint256 amount_) external returns (bool);
     function commissionClaimed(address player_, uint256 poolId_, uint256 amount_) external returns (bool);
     function refundClaimed(address player_, uint256 poolId_, uint256 amount_) external returns (bool);

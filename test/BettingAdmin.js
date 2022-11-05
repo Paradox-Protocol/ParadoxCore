@@ -23,7 +23,7 @@ const {
       const startTime = await time.latest();
       const duration = startTime + 1000;
       const eventName = "US Open";
-      const teams = [{id: 0, name: "Team1", status: 0}, {id: 1, name: "Team2", status: 0}, {id: 2, name: "Team3", status: 0}];
+      const teams = ["Team1", "Team2", "Team3"];
       const [owner, user, user2, user3] = await ethers.getSigners();
   
       const USDC = await ethers.getContractFactory("ERC20MockUpgradeable");
@@ -34,8 +34,8 @@ const {
       const v = await upgrades.deployProxy(VAULT);
       const vault = await v.deployed();
 
-      const ERC1155PresetMinterPauser = await ethers.getContractFactory("ERC1155PresetMinterPauser");
-      const erc1155 = await ERC1155PresetMinterPauser.deploy("test");
+      const ERC1155PresetMinterPauserUpgradeable = await ethers.getContractFactory("ERC1155PresetMinterPauserUpgradeable");
+      const erc1155 = await upgrades.deployProxy(ERC1155PresetMinterPauserUpgradeable, ["test"]);
       await erc1155.deployed();
       
       const BettingAdmin = await ethers.getContractFactory("BettingAdmin");
@@ -80,9 +80,9 @@ const {
 
         const poolTeams =  await bettingAdmin.getPoolTeams(POOL_ID);
         expect(poolTeams.length).equal(NUMBER_OF_TEAMS);
-        expect(poolTeams[0].name).equal(teams[0].name);
-        expect(poolTeams[1].name).equal(teams[1].name);
-        expect(poolTeams[2].name).equal(teams[2].name);
+        expect(poolTeams[0].name).equal(teams[0]);
+        expect(poolTeams[1].name).equal(teams[1]);
+        expect(poolTeams[2].name).equal(teams[2]);
 
       });
   

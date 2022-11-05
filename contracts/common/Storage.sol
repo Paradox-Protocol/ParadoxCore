@@ -43,6 +43,10 @@ contract Storage {
         uint256 endTime;
         // Address of the ERC1155 contract where tokens will be minted
         IERC1155PresetMinterPauser mintContract;
+        // No more commission payment allowed
+        bool commissionDisabled;
+        // No more payouts allowed
+        bool paymentDisabled;
     }
 
     // Struct to hold individual bet data
@@ -78,5 +82,7 @@ contract Storage {
         string name;
         // Team status
         TeamStatus status;
+        // Total amount bet
+        uint256 totalAmount;
     }
 }

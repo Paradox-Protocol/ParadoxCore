@@ -100,16 +100,20 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         return bettingAdmin.getPoolTeams(poolId_);
     }
 
-    function getUsdcContract() public view returns(IERC20Upgradeable) {
+    function usdcContract() public view returns(IERC20Upgradeable) {
         return bettingAdmin.usdcContract();
     }
 
-    function getSigner() public view returns(address) {
+    function signer() public view returns(address) {
         return bettingAdmin.signer();
     }
 
+    function vault() public view returns(address) {
+        return bettingAdmin.vaultContract();
+    }
+
     function _placeBet(address player_, uint256 poolId_, uint256 teamId_, uint256 amount_, uint256 commission_) internal returns (bool) {
-        return bettingAdmin.placeBet(player_, poolId_, teamId_, amount_, commission_);
+        return bettingAdmin.betPlaced(player_, poolId_, teamId_, amount_, commission_);
     }
 
     function _payoutClaimed(address player_, uint256 poolId_, uint256 commissionAmount_) internal returns (bool) {
@@ -150,15 +154,13 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         // console.log("netamount: %s, sender: %s", _netAmount, msg.sender);
         bets.push(Bet(betId, poolId_, teamId_, amount_, player, block.timestamp));
         userBets[poolId_][player].push(betId);
+        poolBets[poolId_].push(betId);
+        _placeBet(player, poolId_, teamId_, amount_, _commission);
 
         uint256 _netAmount = amount_ + _commission;
-        getUsdcContract().transferFrom(player, address(this), _netAmount);
-
+        usdcContract().transferFrom(player, address(this), _netAmount);
         // Mint team tokens
         pool.mintContract.mint(player, teamId_, amount_, "") ;
-
-        _placeBet(player, poolId_, teamId_, amount_, _commission);
-        poolBets[poolId_].push(betId);
 
         emit BetPlaced(poolId_, player, teamId_, amount_);
     }
@@ -174,18 +176,17 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Decided");
         require(claimedPayouts[winner][poolId_] == 0, "Betting: Payout already claimed"); 
+        require(!pool.paymentDisabled, "Betting: Pool payment has been disabled");
 
         uint256 _winningAmount = _totalAmountWon(winner, poolId_);
         require(_winningAmount > 0, "Betting: No payout to claim"); 
+        require(_winningAmount <= pool.totalAmount, "Betting: Payout exceeds total amount");
 
         claimedPayouts[winner][poolId_] = _winningAmount;
-        
-        // Transfer all supply of user after claiming winning to contract
-        // TODO: Need to revisit this
-        pool.mintContract.safeBatchTransferFrom(winner, getSigner(), pool.winners, balances, "");        
-        getUsdcContract().transfer(winner, _winningAmount);
-
         _payoutClaimed(winner, poolId_, _winningAmount);
+        // Burn all supply of user after claiming winning
+        pool.mintContract.burnBatch(winner, pool.winners, balances);        
+        usdcContract().transfer(winner, _winningAmount);
         
         emit WinningsClaimed(poolId_, winner, _winningAmount);
     }
@@ -206,10 +207,11 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         address[] memory _player = _replicateAddress(player, pool.numberOfTeams);
         uint256[] memory _tokens = _getTokenIds(poolId_);
         uint256[] memory balances = pool.mintContract.balanceOfBatch(_player, _tokens);
-        pool.mintContract.burnBatch(player, _tokens, balances);
-        getUsdcContract().transfer(player, _refundAmount);
-
+        
         _refundClaimed(player, poolId_, _refundAmount);
+
+        pool.mintContract.burnBatch(player, _tokens, balances);
+        usdcContract().transfer(player, _refundAmount);
 
         emit RefundClaimed(poolId_, player, _refundAmount);
     }
@@ -227,7 +229,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     //     require(balance > 0, "Betting: No refund to claim"); 
         
     //     pool.mintContract.burn(player, teamId_, balance);
-    //     getUsdcContract().transfer(player, balance);
+    //     usdcContract().transfer(player, balance);
 
     //     emit TeamRefundClaimed(poolId_, player, balance);
     // }
@@ -239,14 +241,16 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Deciced");
         require(claimedCommissions[player][poolId_] == 0, "Betting: Commission already claimed");
+        require(!pool.commissionDisabled, "Betting: Pool commission has been disabled");
 
         uint256 _commissionAmount = _totalCommissionGenerated(player, poolId_);
         require(_commissionAmount > 0, "Betting: No commission to claim"); 
+        require(_commissionAmount <= pool.totalCommissions, "Betting: Payout exceeds total amount");
+
         claimedCommissions[player][poolId_] = _commissionAmount;
-
-        getUsdcContract().transfer(player, _commissionAmount);
-
         _commissionClaimed(player, poolId_, _commissionAmount);
+
+        usdcContract().transfer(player, _commissionAmount);
 
         emit CommissionClaimed(poolId_, player, _commissionAmount);
     }
@@ -260,16 +264,32 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Deciced");
         require(claimedCommissions[player][poolId_] == 0, "Betting: Commission already claimed");
+        require(amount_ > 0, "Betting: No commission to claim"); 
+        require(amount_ <= pool.totalCommissions, "Betting: Payout exceeds total amount");
 
-        _verifySignature(player, amount_, signedBlockNum_, signature_);
+        _verifySignature(player, poolId_, amount_, signedBlockNum_, signature_);
         require(signedBlockNum_ <= block.number, "Signed block number must be older");
         require(signedBlockNum_ + 50 >= block.number, "Signature expired");
 
         // console.log("Transfer amount: %s", amount_);
         claimedCommissions[player][poolId_] = amount_;
-        getUsdcContract().transfer(player, amount_);
+        _commissionClaimed(player, poolId_, amount_);
+
+        usdcContract().transfer(player, amount_);
 
         emit CommissionClaimed(poolId_, player, amount_);
+    }
+
+    function transferCommissionToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
+        Pool memory pool = getPool(poolId_);
+        require(amount_ <= pool.totalCommissions, "Betting: Transfer exceeds total commissions");
+        usdcContract().transfer(vault(), amount_);
+    }
+
+    function transferPayoutToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
+        Pool memory pool = getPool(poolId_);
+        require(amount_ <= pool.totalAmount, "Betting: Transfer exceeds total payouts");
+        usdcContract().transfer(vault(), amount_);
     }
 
     // Stats functions
@@ -334,14 +354,16 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         uint256 _totalWinnings = 0;
         for  (uint256 i = 0; i < pool.winners.length; i++) { 
-            _totalWinnings += pool.mintContract.totalSupply(pool.winners[i]);
+            Team memory _team = getPoolTeam(poolId_, pool.winners[i]);
+            _totalWinnings += _team.totalAmount;
         }
         _totalWinnings = pool.totalAmount - _totalWinnings;
         uint256 _winningsPerTeam = _totalWinnings / pool.winners.length;
 
         uint256 _winningAmount = 0;
         for (uint256 i = 0; i < pool.winners.length; i++) {
-            uint256 _teamBalance = pool.mintContract.totalSupply(pool.winners[i]);
+            Team memory _team = getPoolTeam(poolId_, pool.winners[i]);
+            uint256 _teamBalance = _team.totalAmount;
             if (_teamBalance == 0) {
                 continue;
             }
@@ -442,10 +464,11 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         return (amount_ * COMMISION * SCALING_FACTOR / BPS_UNIT) / SCALING_FACTOR;
     }
 
-    function getMessageHash(address player_, uint256 amount_, uint256 signedBlockNum_) public pure returns(bytes32) {
+    function getMessageHash(address player_, uint256 poolId_, uint256 amount_, uint256 signedBlockNum_) public pure returns(bytes32) {
         return keccak256(
             abi.encodePacked(
                 player_,
+                poolId_,
                 amount_,
                 signedBlockNum_
             )
@@ -454,16 +477,17 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
     function _verifySignature(
         address player_,
+        uint256 poolId_,
         uint256 amount_,
         uint256 signedBlockNum_,
         bytes memory signature_
     ) internal view {
-        bytes32 msgHash = getMessageHash(player_, amount_, signedBlockNum_);
+        bytes32 msgHash = getMessageHash(player_, poolId_, amount_, signedBlockNum_);
         bytes32 signedHash = keccak256(
             abi.encodePacked("\x19Ethereum Signed Message:\n32", msgHash)
         );
         require(
-            recoverSigner(signedHash, signature_) == getSigner(),
+            recoverSigner(signedHash, signature_) == signer(),
             "Invalid signature"
         );
     }

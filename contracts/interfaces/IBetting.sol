@@ -5,5 +5,6 @@ import "../common/Storage.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 
 interface IBetting {
-    
+    function transferCommissionToVault(uint256 amount_) external;
+    function transferPayoutToVault(uint256 amount_) external;
 }
