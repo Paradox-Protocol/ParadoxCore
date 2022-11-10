@@ -100,8 +100,8 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         return bettingAdmin.getPoolTeams(poolId_);
     }
 
-    function usdcContract() public view returns(IERC20Upgradeable) {
-        return bettingAdmin.usdcContract();
+    function erc20Contract() public view returns(IERC20Upgradeable) {
+        return bettingAdmin.erc20Contract();
     }
 
     function signer() public view returns(address) {
@@ -135,7 +135,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     // user is minted amount_ ERC1155 tokens of type teamId_
     function placeBet(uint256 poolId_, uint256 teamId_, uint256 amount_) external validPool(poolId_) {
         Pool memory pool = getPool(poolId_);
-        require(pool.status == PoolStatus.Running, "Betting: Pool status should be Created");
+        require(pool.status == PoolStatus.Running, "Betting: Pool status should be Running");
         require(amount_ >= MIN_BET, "Betting: Amount should be more than MIN_BET");
         require(pool.startTime > block.timestamp, "Betting: Cannot place bet after pool start time");
 
@@ -158,7 +158,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         _placeBet(player, poolId_, teamId_, amount_, _commission);
 
         uint256 _netAmount = amount_ + _commission;
-        usdcContract().transferFrom(player, address(this), _netAmount);
+        erc20Contract().transferFrom(player, address(this), _netAmount);
         // Mint team tokens
         pool.mintContract.mint(player, teamId_, amount_, "") ;
 
@@ -186,7 +186,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         _payoutClaimed(winner, poolId_, _winningAmount);
         // Burn all supply of user after claiming winning
         pool.mintContract.burnBatch(winner, pool.winners, balances);        
-        usdcContract().transfer(winner, _winningAmount);
+        erc20Contract().transfer(winner, _winningAmount);
         
         emit WinningsClaimed(poolId_, winner, _winningAmount);
     }
@@ -211,7 +211,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         _refundClaimed(player, poolId_, _refundAmount);
 
         pool.mintContract.burnBatch(player, _tokens, balances);
-        usdcContract().transfer(player, _refundAmount);
+        erc20Contract().transfer(player, _refundAmount);
 
         emit RefundClaimed(poolId_, player, _refundAmount);
     }
@@ -229,7 +229,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     //     require(balance > 0, "Betting: No refund to claim"); 
         
     //     pool.mintContract.burn(player, teamId_, balance);
-    //     usdcContract().transfer(player, balance);
+    //     erc20Contract().transfer(player, balance);
 
     //     emit TeamRefundClaimed(poolId_, player, balance);
     // }
@@ -250,7 +250,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         claimedCommissions[player][poolId_] = _commissionAmount;
         _commissionClaimed(player, poolId_, _commissionAmount);
 
-        usdcContract().transfer(player, _commissionAmount);
+        erc20Contract().transfer(player, _commissionAmount);
 
         emit CommissionClaimed(poolId_, player, _commissionAmount);
     }
@@ -275,7 +275,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         claimedCommissions[player][poolId_] = amount_;
         _commissionClaimed(player, poolId_, amount_);
 
-        usdcContract().transfer(player, amount_);
+        erc20Contract().transfer(player, amount_);
 
         emit CommissionClaimed(poolId_, player, amount_);
     }
@@ -283,20 +283,20 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     function transferCommissionToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
         Pool memory pool = getPool(poolId_);
         require(amount_ <= pool.totalCommissions, "Betting: Transfer exceeds total commissions");
-        usdcContract().transfer(vault(), amount_);
+        erc20Contract().transfer(vault(), amount_);
     }
 
     function transferPayoutToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
         Pool memory pool = getPool(poolId_);
         require(amount_ <= pool.totalAmount, "Betting: Transfer exceeds total payouts");
-        usdcContract().transfer(vault(), amount_);
+        erc20Contract().transfer(vault(), amount_);
     }
 
     // Stats functions
     function viewPoolDistribution(uint256 poolId_) external view returns (uint256[] memory _betAmounts){
         Pool memory pool = getPool(poolId_);
         _betAmounts = new uint256[](pool.numberOfTeams);
-        for (uint256 i = 0; i < pool.numberOfTeams; i++) {
+        for (uint256 i = 0; i < pool.numberOfTeams; ++i) {
             _betAmounts[i] = pool.mintContract.totalSupply(i);
         }
 
@@ -353,7 +353,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         }
 
         uint256 _totalWinnings = 0;
-        for  (uint256 i = 0; i < pool.winners.length; i++) { 
+        for  (uint256 i = 0; i < pool.winners.length; ++i) { 
             Team memory _team = getPoolTeam(poolId_, pool.winners[i]);
             _totalWinnings += _team.totalAmount;
         }
@@ -361,7 +361,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         uint256 _winningsPerTeam = _totalWinnings / pool.winners.length;
 
         uint256 _winningAmount = 0;
-        for (uint256 i = 0; i < pool.winners.length; i++) {
+        for (uint256 i = 0; i < pool.winners.length; ++i) {
             Team memory _team = getPoolTeam(poolId_, pool.winners[i]);
             uint256 _teamBalance = _team.totalAmount;
             if (_teamBalance == 0) {
@@ -389,11 +389,11 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         uint256[] memory _userBets = userBets[poolId_][who_];
         uint256 _refundedAmount = 0;
 
-        for (uint8 i = 0; i < balances.length; i++) {
+        for (uint8 i = 0; i < balances.length; ++i) {
             _refundedAmount += balances[i];
         }
 
-        for (uint256 i = 0; i < _userBets.length; i++) {
+        for (uint256 i = 0; i < _userBets.length; ++i) {
             Commission memory commission = poolCommission[poolId_][_userBets[i]];
             _refundedAmount += commission.amount;
         } 
@@ -416,7 +416,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         uint256 _commissionAmount = 0;
 
         uint256 startIndex = 0;
-        for(uint256 i = 0; i < poolBets[poolId_].length; i++) {
+        for(uint256 i = 0; i < poolBets[poolId_].length; ++i) {
             if (poolBets[poolId_][i] == _userBets[0]) {
                 startIndex = i;
                 break;
@@ -425,7 +425,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         Bet memory bet = bets[_userBets[0]];
         uint256 betAmount = bet.amount;
-        for (uint256 i = startIndex + 1; i < poolBets[poolId_].length; i++) {
+        for (uint256 i = startIndex + 1; i < poolBets[poolId_].length; ++i) {
             uint256 _betId = poolBets[poolId_][i];
             Commission memory commission = poolCommission[poolId_][_betId];
             if (commission.player == address(0)) {
@@ -495,7 +495,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     function _getTokenIds(uint256 poolId_) internal view returns (uint256[] memory) {
         Pool memory pool = getPool(poolId_);
         uint256[] memory tokenIds = new uint256[](pool.numberOfTeams);
-        for (uint256 i = 0; i < pool.numberOfTeams; i++) {
+        for (uint256 i = 0; i < pool.numberOfTeams; ++i) {
             tokenIds[i] = i;
         }
         return tokenIds;
@@ -503,7 +503,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
     function _replicateAddress(address sender_, uint256 count_) internal pure returns (address[] memory) {
         address[] memory _addresses = new address[](count_);
-        for (uint8 i = 0; i < count_; i++) {
+        for (uint8 i = 0; i < count_; ++i) {
             _addresses[i] = sender_;
         }
         return _addresses;

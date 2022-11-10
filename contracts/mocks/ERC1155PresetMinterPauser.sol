@@ -2,15 +2,12 @@
 
 pragma solidity >=0.7.0 <0.9.0;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155BurnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155SupplyUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 /**
  * @dev {ERC1155} token, including:
  *
@@ -27,10 +24,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
  *
  * _Deprecated in favor of https://wizard.openzeppelin.com/[Contracts Wizard]._
  */
-contract ERC1155PresetMinterPauserUpgradeable is Initializable, UUPSUpgradeable, ContextUpgradeable, OwnableUpgradeable, AccessControlEnumerableUpgradeable, ERC1155BurnableUpgradeable, ERC1155SupplyUpgradeable {
-    function initialize(string memory uri) public virtual initializer {
-        __ERC1155PresetMinterPauser_init(uri);
-    }
+contract ERC1155PresetMinterPauser is Context, Initializable, AccessControlEnumerable, ERC1155Burnable, ERC1155Supply {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -38,22 +32,12 @@ contract ERC1155PresetMinterPauserUpgradeable is Initializable, UUPSUpgradeable,
      * @dev Grants `DEFAULT_ADMIN_ROLE`, `MINTER_ROLE`, and `PAUSER_ROLE` to the account that
      * deploys the contract.
      */
-    function __ERC1155PresetMinterPauser_init(string memory uri) internal onlyInitializing {
-        __ERC1155_init_unchained(uri);
-        __ERC1155Supply_init_unchained();
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        __ERC1155PresetMinterPauser_init_unchained(uri);
+    constructor(string memory uri) ERC1155(uri) {
     }
 
-    function __ERC1155PresetMinterPauser_init_unchained(string memory) internal onlyInitializing {
-        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
-
-        _setupRole(MINTER_ROLE, _msgSender());
-        _setupRole(PAUSER_ROLE, _msgSender());
-    }
-
-    function _authorizeUpgrade (address newImplementation) internal virtual override onlyOwner {
+    function initialize(address defaultAdmin_, address minter_, string memory uri) public initializer {
+        _setupRole(DEFAULT_ADMIN_ROLE, defaultAdmin_);
+        _setupRole(MINTER_ROLE, minter_);
     }
 
     /**
@@ -97,7 +81,7 @@ contract ERC1155PresetMinterPauserUpgradeable is Initializable, UUPSUpgradeable,
         public
         view
         virtual
-        override(AccessControlEnumerableUpgradeable, ERC1155Upgradeable)
+        override(AccessControlEnumerable, ERC1155)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
@@ -110,14 +94,7 @@ contract ERC1155PresetMinterPauserUpgradeable is Initializable, UUPSUpgradeable,
         uint256[] memory ids,
         uint256[] memory amounts,
         bytes memory data
-    ) internal virtual override(ERC1155Upgradeable, ERC1155SupplyUpgradeable) {
+    ) internal virtual override(ERC1155, ERC1155Supply) {
         super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
     }
-
-    /**
-     * @dev This empty reserved space is put in place to allow future versions to add new
-     * variables without shifting down storage in the inheritance chain.
-     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
-     */
-    uint256[50] private __gap;
 }

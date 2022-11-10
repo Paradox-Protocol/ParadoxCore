@@ -32,4 +32,5 @@ interface IERC1155PresetMinterPauser {
         uint256[] memory amounts,
         bytes memory data
     ) external;
+    function initialize(address defaultAdmin_, address minter_, string memory uri) external;
 }

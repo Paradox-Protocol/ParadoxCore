@@ -16,11 +16,11 @@ module.exports = {
   networks: {
     rinkeby: {
       url: ``,
-      accounts: [`${process.env.PRIVATE_KEY}`]
+      accounts: [``]
     },
     goerli: {
       url: ``,
-      accounts: [`${process.env.PRIVATE_KEY}`]
+      accounts: [``]
     }
   },
   etherscan: {

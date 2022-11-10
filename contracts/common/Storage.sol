@@ -9,7 +9,7 @@ contract Storage {
     // 1 - Running
     // 2 - Decided
     // 3 - Canceled
-    enum PoolStatus{ Created, Running, Decided, Canceled }
+    enum PoolStatus{ Created, Running, Decided, Canceled, Closed }
     // Team Statuses
     // 0 - Created
     // 1 - Refunded

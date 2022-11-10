@@ -8,7 +8,7 @@ interface IBettingAdmin {
     function getPool(uint256 poolId_) external view returns(Storage.Pool memory);
     function getPoolTeam(uint256 poolId_, uint256 teamId_) external view returns(Storage.Team memory);
     function getPoolTeams(uint256 poolId_) external view returns(Storage.Team[] memory);
-    function usdcContract() external view returns(IERC20Upgradeable);
+    function erc20Contract() external view returns(IERC20Upgradeable);
     function signer() external view returns(address);
     function vaultContract() external view returns(address);
     function getTotalPools() external view returns(uint256);

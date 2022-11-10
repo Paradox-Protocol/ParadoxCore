@@ -4,6 +4,7 @@ const {
   } = require("@nomicfoundation/hardhat-network-helpers");
   const { expect } = require("chai");
   const { ethers, upgrades } = require("hardhat");
+  const { formatBytes32String } = ethers.utils
 
   describe("Betting", function () {
     const NUMBER_OF_TEAMS = 3;
@@ -13,7 +14,8 @@ const {
       Created: 0,
       Running: 1,
       Over: 2,
-      Expired: 3    
+      Expired: 3,
+      Closed: 4,  
     };
 
     function convertToWei(amount) {
@@ -32,6 +34,7 @@ const {
       const startTime = (await time.latest()) + 86400;
       const duration = startTime + 86400;
       const eventName = "US Open";
+      const uri = "test";
       const teams = ["Team1", "Team2", "Team3"];
       const [owner, user, user2, user3] = await ethers.getSigners();
   
@@ -43,16 +46,17 @@ const {
       const v = await upgrades.deployProxy(VAULT);
       const vault = await v.deployed();
 
-      const ERC1155PresetMinterPauserUpgradeable = await ethers.getContractFactory("ERC1155PresetMinterPauserUpgradeable");
-      const erc1155 = await upgrades.deployProxy(ERC1155PresetMinterPauserUpgradeable, ["test"]);
+      const ERC1155PresetMinterPauser = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+      const erc1155 = await ERC1155PresetMinterPauser.deploy("test");
       await erc1155.deployed();
 
-      const erc1155_2 = await upgrades.deployProxy(ERC1155PresetMinterPauserUpgradeable, ["test 2"]);
-      await erc1155_2.deployed();
+      const Proxy = await ethers.getContractFactory("Proxy");
+      const proxy = await Proxy.deploy(erc1155.address);
+      await proxy.deployed();
       
       const BettingAdmin = await ethers.getContractFactory("BettingAdmin");
       const bAdmin = await upgrades.deployProxy(BettingAdmin, [
-        usdc.address, vault.address, owner.address
+        usdc.address, vault.address, owner.address, proxy.address
       ]);
       const bettingAdmin = await bAdmin.deployed();
 
@@ -62,7 +66,9 @@ const {
       ]);
       const betting = await b.deployed(); 
       
-      await bettingAdmin.grantRole("0xa5a0b70b385ff7611cd3840916bd08b10829e5bf9e6637cf79dd9a427fc0e2ab", owner.address);
+      await bettingAdmin.grantRole(bettingAdmin.MULTISIG_ROLE(), owner.address);
+      await bettingAdmin.grantRole(bettingAdmin.GAME_ADMIN_ROLE(), owner.address);
+      await bettingAdmin.grantRole(bettingAdmin.ADMIN_ROLE(), owner.address);
       await bettingAdmin.updateBettingAddress(betting.address);
       
       await usdc.connect(user).approve(betting.address, convertToWei(500))
@@ -73,27 +79,28 @@ const {
       await usdc.connect(user2).mint(user2.address, convertToWei(500))
       await usdc.connect(user3).mint(user3.address, convertToWei(500))
 
-      await erc1155.grantRole("0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6", betting.address);
-      await erc1155.connect(user).setApprovalForAll(betting.address, true);
-      await erc1155.connect(user2).setApprovalForAll(betting.address, true);
-      await erc1155.connect(user3).setApprovalForAll(betting.address, true);
+      return { betting , bettingAdmin, usdc, vault, erc1155, owner, user, user2, user3, startTime, duration, eventName, teams, uri};
+    }
 
-      await erc1155_2.grantRole("0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6", betting.address);
-      await erc1155_2.connect(user).setApprovalForAll(betting.address, true);
-      await erc1155_2.connect(user2).setApprovalForAll(betting.address, true);
-      await erc1155_2.connect(user3).setApprovalForAll(betting.address, true);
+    async function initializeERC1155(erc1155Address, user, user2, user3, bettingAddress) {
+      const ERC1155 = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+      const erc1155 = ERC1155.attach(erc1155Address);
 
-      return { betting , bettingAdmin, usdc, vault, erc1155, erc1155_2, owner, user, user2, user3, startTime, duration, eventName, teams};
+      await erc1155.connect(user).setApprovalForAll(bettingAddress, true);
+      await erc1155.connect(user2).setApprovalForAll(bettingAddress, true);
+      await erc1155.connect(user3).setApprovalForAll(bettingAddress, true);
     }
 
     describe("PlaceBet", function () {
       it("Should allow user to place bet", async function () {
-        const { bettingAdmin, betting, erc1155, eventName, teams, startTime, duration, user, usdc } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, eventName, teams, uri, startTime, duration, user, user2, user3, usdc } = await loadFixture(deployInitializeFixture);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
+
         await bettingAdmin.startPool(POOL_ID);
 
-        console.log(await bettingAdmin.getPool(POOL_ID));
         await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
@@ -112,6 +119,9 @@ const {
 
         const userBets = await betting.getUserBets(user.address, POOL_ID);
         expect(userBets[0]).to.equal(0);
+
+        const ERC1155 = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+        const erc1155 = ERC1155.attach(_p.mintContract);
         expect(await erc1155.totalSupply(0)).to.equal(0);
         expect(await erc1155.totalSupply(1)).to.equal(convertToWei(100));
         expect(await erc1155.totalSupply(2)).to.equal(0);
@@ -120,9 +130,11 @@ const {
 
     describe("ClaimWinning", function () {
       it("Should allow user to claim winnings", async function () {
-        const { bettingAdmin, betting, erc1155, eventName, teams, startTime, duration, user, user2, user3, usdc } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, eventName, teams, uri, startTime, duration, user, user2, user3, usdc } = await loadFixture(deployInitializeFixture);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
         await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
@@ -140,10 +152,15 @@ const {
         expect(userBets[0]).to.equal(0);
         expect(userBets[1]).to.equal(3);
 
+        const ERC1155 = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+        const erc1155 = ERC1155.attach(_p.mintContract);
+
         expect(await erc1155.totalSupply(0)).to.equal(convertToWei(300));
         expect(await erc1155.totalSupply(1)).to.equal(convertToWei(300));
         expect(await erc1155.totalSupply(2)).to.equal(convertToWei(100));
 
+        await time.increaseTo(startTime);
+        await bettingAdmin.closePool(POOL_ID);
         await bettingAdmin.gradePool(POOL_ID, 1);
 
         expect(await betting.totalPayouts(user.address, POOL_ID)).to.equal(convertToWei(700));
@@ -164,9 +181,11 @@ const {
       });
 
       it("Should allow multiple users to claim winnings ", async function () {
-        const { bettingAdmin, betting, erc1155, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, usdc, eventName, teams, uri, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
         await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
@@ -184,10 +203,15 @@ const {
         expect(userBets[0]).to.equal(0);
         expect(userBets[1]).to.equal(3);
 
+        const ERC1155 = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+        const erc1155 = ERC1155.attach(_p.mintContract);
+
         expect(await erc1155.totalSupply(0)).to.equal(convertToWei(300));
         expect(await erc1155.totalSupply(1)).to.equal(convertToWei(300));
         expect(await erc1155.totalSupply(2)).to.equal(convertToWei(100));
 
+        await time.increaseTo(startTime);
+        await bettingAdmin.closePool(POOL_ID);
         await bettingAdmin.gradePool(POOL_ID, 0);
 
         expect(await betting.totalPayouts(user.address, POOL_ID)).to.equal(convertToWei(toString(233.333333333333333333)));
@@ -202,9 +226,11 @@ const {
       });
 
       it("Should allow users to claim winnings in case of tie", async function () {
-        const { bettingAdmin, betting, erc1155, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, usdc, eventName, teams, uri, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
         await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
@@ -222,10 +248,14 @@ const {
         expect(userBets[0]).to.equal(0);
         expect(userBets[1]).to.equal(3);
 
+        const ERC1155 = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+        const erc1155 = ERC1155.attach(_p.mintContract);
         expect(await erc1155.totalSupply(0)).to.equal(convertToWei(300));
         expect(await erc1155.totalSupply(1)).to.equal(convertToWei(300));
         expect(await erc1155.totalSupply(2)).to.equal(convertToWei(100));
 
+        await time.increaseTo(startTime);
+        await bettingAdmin.closePool(POOL_ID);
         await bettingAdmin.markPoolTie(POOL_ID, [0, 1]);
 
         expect(await betting.totalPayouts(user.address, POOL_ID)).to.equal(convertToWei(toString(466.666666666666666666)));
@@ -240,12 +270,14 @@ const {
       });
 
       it("Should allow users to claim winnings in case of tie - 2", async function () {
-        const { bettingAdmin, betting, erc1155, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, usdc, eventName, teams, uri, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
 
         const teams2 = [...teams];
         teams2.push("xyz");
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS + 1, eventName, startTime, duration, erc1155.address, teams2);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS + 1, eventName, startTime, duration, teams2, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
         await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(2));
@@ -264,11 +296,15 @@ const {
         expect(userBets[0]).to.equal(0);
         expect(userBets[1]).to.equal(4);
 
+        const ERC1155 = await ethers.getContractFactory("ERC1155PresetMinterPauser");
+        const erc1155 = ERC1155.attach(_p.mintContract);
         expect(await erc1155.totalSupply(0)).to.equal(convertToWei(2));
         expect(await erc1155.totalSupply(1)).to.equal(convertToWei(3));
         expect(await erc1155.totalSupply(2)).to.equal(convertToWei(4));
         expect(await erc1155.totalSupply(3)).to.equal(convertToWei(15));
 
+        await time.increaseTo(startTime);
+        await bettingAdmin.closePool(POOL_ID);
         await bettingAdmin.markPoolTie(POOL_ID, [2, 3]);
 
         expect(await betting.totalPayouts(user.address, POOL_ID)).to.equal(convertToWei(toString(11.666666666666666666)));
@@ -289,9 +325,11 @@ const {
 
     describe("ClaimRefund", function () {
       it("Should allow user to claim refunds", async function () {
-        const { bettingAdmin, betting, erc1155, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, usdc, eventName, teams, uri, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
         await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
@@ -322,12 +360,16 @@ const {
 
     describe("ClaimCommission", function () {
       it("Should allow user to claim pool", async function () {
-        const { bettingAdmin, betting, erc1155, erc1155_2, usdc, eventName, teams, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
+        const { bettingAdmin, betting, usdc, eventName, teams, uri, startTime, duration, user, user2, user3 } = await loadFixture(deployInitializeFixture);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p = await bettingAdmin.getPool(POOL_ID);
+        await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
-        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, erc1155_2.address, teams);
+        await bettingAdmin.createPool(NUMBER_OF_TEAMS, eventName, startTime, duration, teams, uri);
+        const _p2 = await bettingAdmin.getPool(POOL_ID_2);
+        await initializeERC1155(_p2.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(1);
 
         await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(100));
@@ -343,6 +385,9 @@ const {
 
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(604));
 
+        await time.increaseTo(startTime);
+        await bettingAdmin.closePool(POOL_ID);
+        await bettingAdmin.closePool(POOL_ID_2);
         await bettingAdmin.gradePool(POOL_ID, 1);
         await bettingAdmin.gradePool(POOL_ID_2, 2);
 
