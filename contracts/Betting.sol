@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity >=0.7.0 <0.9.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -264,6 +264,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Deciced");
         require(claimedCommissions[player][poolId_] == 0, "Betting: Commission already claimed");
+        require(!pool.commissionDisabled, "Betting: Pool commission has been disabled");
         require(amount_ > 0, "Betting: No commission to claim"); 
         require(amount_ <= pool.totalCommissions, "Betting: Payout exceeds total amount");
 
