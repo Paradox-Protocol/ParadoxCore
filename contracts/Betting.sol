@@ -133,7 +133,8 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     // Commission, if applicable, is calculated on the amount_ and added to final deduction
     // amount_ + commission is transferred from user's balance to contract
     // user is minted amount_ ERC1155 tokens of type teamId_
-    function placeBet(uint256 poolId_, uint256 teamId_, uint256 amount_) external validPool(poolId_) {
+    // player_ is address that receives the bet
+    function placeBet(address player_, uint256 poolId_, uint256 teamId_, uint256 amount_) external validPool(poolId_) {
         Pool memory pool = getPool(poolId_);
         require(pool.status == PoolStatus.Running, "Betting: Pool status should be Running");
         require(amount_ >= MIN_BET, "Betting: Amount should be more than MIN_BET");
@@ -143,52 +144,52 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         require(team.status == TeamStatus.Created, "Betting: Team status should be Created");
 
         uint256 betId = bets.length;
-        address player = msg.sender;
+
         uint _commission = 0;
         // Update commission stats
         if (pool.totalBets > 0) {
             _commission = _calculateCommission(amount_);
-            poolCommission[poolId_][betId] = Commission(_commission, pool.totalAmount, player);
+            poolCommission[poolId_][betId] = Commission(_commission, pool.totalAmount, player_);
         }
 
         // console.log("netamount: %s, sender: %s", _netAmount, msg.sender);
-        bets.push(Bet(betId, poolId_, teamId_, amount_, player, block.timestamp));
-        userBets[poolId_][player].push(betId);
+        bets.push(Bet(betId, poolId_, teamId_, amount_, player_, block.timestamp));
+        userBets[poolId_][player_].push(betId);
         poolBets[poolId_].push(betId);
-        _placeBet(player, poolId_, teamId_, amount_, _commission);
+        _placeBet(player_, poolId_, teamId_, amount_, _commission);
 
         uint256 _netAmount = amount_ + _commission;
-        erc20Contract().transferFrom(player, address(this), _netAmount);
+        erc20Contract().transferFrom(msg.sender, address(this), _netAmount);
         // Mint team tokens
-        pool.mintContract.mint(player, teamId_, amount_, "") ;
+        pool.mintContract.mint(player_, teamId_, amount_, "") ;
 
-        emit BetPlaced(poolId_, player, teamId_, amount_);
+        emit BetPlaced(poolId_, player_, teamId_, amount_);
     }
 
     // Allows user to claim payout against a poolId
     // Payout is only transferred if user has made a bet against winning team
-    function claimPayment(uint256 poolId_) external validPool(poolId_) {
+    // player_ is address that receives payment
+    function claimPayment(address player_, uint256 poolId_) external validPool(poolId_) {
         Pool memory pool = getPool(poolId_);
-        address winner = msg.sender;
 
-        address[] memory _player = _replicateAddress(winner, pool.winners.length);
+        address[] memory _player = _replicateAddress(player_, pool.winners.length);
         uint256[] memory balances = pool.mintContract.balanceOfBatch(_player, pool.winners);
 
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Decided");
-        require(claimedPayouts[winner][poolId_] == 0, "Betting: Payout already claimed"); 
         require(!pool.paymentDisabled, "Betting: Pool payment has been disabled");
 
-        uint256 _winningAmount = _totalAmountWon(winner, poolId_);
+        uint256 _winningAmount = _totalAmountWon(player_, poolId_);
         require(_winningAmount > 0, "Betting: No payout to claim"); 
         require(_winningAmount <= pool.totalAmount, "Betting: Payout exceeds total amount");
 
-        claimedPayouts[winner][poolId_] = _winningAmount;
-        _payoutClaimed(winner, poolId_, _winningAmount);
+        claimedPayouts[player_][poolId_] = _winningAmount;
+        _payoutClaimed(player_, poolId_, _winningAmount);
+
         // Burn all supply of user after claiming winning
-        pool.mintContract.burnBatch(winner, pool.winners, balances);        
-        erc20Contract().transfer(winner, _winningAmount);
-        
-        emit WinningsClaimed(poolId_, winner, _winningAmount);
+        pool.mintContract.burnBatch(msg.sender, pool.winners, balances);
+        erc20Contract().transfer(player_, _winningAmount);
+
+        emit WinningsClaimed(poolId_, player_, _winningAmount);
     }
 
     // Allows user to claim refund against a poolId

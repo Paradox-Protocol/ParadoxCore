@@ -101,7 +101,7 @@ const {
 
         await bettingAdmin.startPool(POOL_ID);
 
-        await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 1, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(100));
@@ -137,10 +137,10 @@ const {
         await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
-        await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
-        await betting.connect(user2).placeBet(POOL_ID, 0, convertToWei(200));
-        await betting.connect(user3).placeBet(POOL_ID, 2, convertToWei(100));
-        await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 1, convertToWei(300));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 0, convertToWei(200));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID, 2, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 0, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(700));
@@ -167,7 +167,7 @@ const {
         expect(await betting.totalPayouts(user2.address, POOL_ID)).to.equal(0);
         expect(await betting.totalPayouts(user3.address, POOL_ID)).to.equal(0);
 
-        await betting.connect(user).claimPayment(POOL_ID);
+        await betting.connect(user).claimPayment(user.address, POOL_ID);
 
         expect(await betting.totalCommissions(user.address, POOL_ID)).to.equal(convertToWei(3.1));
         expect(await betting.totalCommissions(user2.address, POOL_ID)).to.equal(convertToWei(0.733333333333333333));
@@ -188,10 +188,10 @@ const {
         await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
-        await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
-        await betting.connect(user2).placeBet(POOL_ID, 0, convertToWei(200));
-        await betting.connect(user3).placeBet(POOL_ID, 2, convertToWei(100));
-        await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 1, convertToWei(300));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 0, convertToWei(200));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID, 2, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 0, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(700));
@@ -218,10 +218,10 @@ const {
         expect(await betting.totalPayouts(user2.address, POOL_ID)).to.equal(convertToWei(toString(466.666666666666666666)));
         expect(await betting.totalPayouts(user3.address, POOL_ID)).to.equal(0);
 
-        await betting.connect(user).claimPayment(POOL_ID);
+        await betting.connect(user).claimPayment(user.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(470.666666666666666667));
 
-        await betting.connect(user2).claimPayment(POOL_ID);
+        await betting.connect(user2).claimPayment(user.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(4));
       });
 
@@ -233,10 +233,10 @@ const {
         await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
-        await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
-        await betting.connect(user2).placeBet(POOL_ID, 0, convertToWei(200));
-        await betting.connect(user3).placeBet(POOL_ID, 2, convertToWei(100));
-        await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 1, convertToWei(300));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 0, convertToWei(200));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID, 2, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 0, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(700));
@@ -262,10 +262,10 @@ const {
         expect(await betting.totalPayouts(user2.address, POOL_ID)).to.equal(convertToWei(toString(233.333333333333333333)));
         expect(await betting.totalPayouts(user3.address, POOL_ID)).to.equal(0);
 
-        await betting.connect(user2).claimPayment(POOL_ID);
+        await betting.connect(user2).claimPayment(user2.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(470.666666666666666667));
 
-        await betting.connect(user).claimPayment(POOL_ID);
+        await betting.connect(user).claimPayment(user.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(4));
       });
 
@@ -280,11 +280,11 @@ const {
         await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
-        await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(2));
-        await betting.connect(user2).placeBet(POOL_ID, 1, convertToWei(3));
-        await betting.connect(user2).placeBet(POOL_ID, 2, convertToWei(4));
-        await betting.connect(user3).placeBet(POOL_ID, 3, convertToWei(5));
-        await betting.connect(user).placeBet(POOL_ID, 3, convertToWei(10));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 0, convertToWei(2));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 1, convertToWei(3));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 2, convertToWei(4));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID, 3, convertToWei(5));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 3, convertToWei(10));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(24));
@@ -311,13 +311,13 @@ const {
         expect(await betting.totalPayouts(user2.address, POOL_ID)).to.equal(convertToWei(toString(6.5)));
         expect(await betting.totalPayouts(user3.address, POOL_ID)).to.equal(convertToWei(toString(5.833333333333333)));
 
-        await betting.connect(user2).claimPayment(POOL_ID);
+        await betting.connect(user2).claimPayment(user2.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(17.72));
 
-        await betting.connect(user).claimPayment(POOL_ID);
+        await betting.connect(user).claimPayment(user.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(6.05333333333333333));
 
-        await betting.connect(user3).claimPayment(POOL_ID);
+        await betting.connect(user3).claimPayment(user3.address, POOL_ID);
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(0.22));
       });
   
@@ -332,10 +332,10 @@ const {
         await initializeERC1155(_p.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(POOL_ID);
 
-        await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(300));
-        await betting.connect(user2).placeBet(POOL_ID, 0, convertToWei(200));
-        await betting.connect(user3).placeBet(POOL_ID, 2, convertToWei(100));
-        await betting.connect(user).placeBet(POOL_ID, 0, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 1, convertToWei(300));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 0, convertToWei(200));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID, 2, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 0, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(700));
@@ -372,12 +372,12 @@ const {
         await initializeERC1155(_p2.mintContract, user, user2, user3, betting.address);
         await bettingAdmin.startPool(1);
 
-        await betting.connect(user).placeBet(POOL_ID, 1, convertToWei(100));
-        await betting.connect(user2).placeBet(POOL_ID_2, 0, convertToWei(100));
-        await betting.connect(user2).placeBet(POOL_ID, 0, convertToWei(100));
-        await betting.connect(user3).placeBet(POOL_ID_2, 2, convertToWei(100));
-        await betting.connect(user3).placeBet(POOL_ID, 2, convertToWei(100));
-        await betting.connect(user2).placeBet(POOL_ID_2, 1, convertToWei(100));
+        await betting.connect(user).placeBet(user.address, POOL_ID, 1, convertToWei(100));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID_2, 0, convertToWei(100));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID, 0, convertToWei(100));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID_2, 2, convertToWei(100));
+        await betting.connect(user3).placeBet(user3.address, POOL_ID, 2, convertToWei(100));
+        await betting.connect(user2).placeBet(user2.address, POOL_ID_2, 1, convertToWei(100));
 
         const pool =  await bettingAdmin.getPool(POOL_ID);
         expect(pool.totalAmount).to.equal(convertToWei(300));
@@ -408,7 +408,7 @@ const {
         expect(await betting.totalPayouts(user2.address, POOL_ID)).to.equal(0);
         expect(await betting.totalPayouts(user3.address, POOL_ID)).to.equal(0);
 
-        await betting.connect(user).claimPayment(POOL_ID);
+        await betting.connect(user).claimPayment(user.address, POOL_ID);
 
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(302));
 
@@ -429,7 +429,7 @@ const {
         expect(await betting.totalPayouts(user2.address, POOL_ID_2)).to.equal(0);
         expect(await betting.totalPayouts(user3.address, POOL_ID_2)).to.equal(convertToWei(300));
 
-        await betting.connect(user3).claimPayment(POOL_ID_2);
+        await betting.connect(user3).claimPayment(user3.address, POOL_ID_2);
 
         expect(await usdc.balanceOf(betting.address)).to.equal(convertToWei(0));
       });
