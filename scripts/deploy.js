@@ -40,40 +40,45 @@ async function main(
 ) {
   if (!erc20Address) throw new Error("Specify an erc20Address to deploy");
 
-  console.log("Deploying Paradox admin for erc20Address", erc20Address);
-
   // Get address that is deploying
   let deployer;
   let deployerAddress;
   if (impersonate) {
     deployerAddress = testDeployer;
-    deployer = await impersonateAccount(deployerAddress)
+    deployer = await impersonateAccount(deployerAddress);
+    await network.provider.send("hardhat_setBalance", [
+      deployerAddress,
+      "0xDE0B6B3A7640000",
+    ]);
   } else {
     [deployer] = await ethers.getSigners();
     deployerAddress = deployer.address;
   }
 
+  console.log("Deploying Paradox admin for erc20Address", erc20Address);
+  console.log("Deployer is", deployerAddress, "\n");
+
+
   // DEPLOY PROXY AND CLONE FOR ERC1155 MINTER
   const ERC1155PresetMinterPauser = await ethers.getContractFactory("ERC1155PresetMinterPauser");
-  const erc1155 = await ERC1155PresetMinterPauser.deploy("Paradox Minter");
+  const erc1155 = await ERC1155PresetMinterPauser.connect(deployer).deploy("Paradox Minter");
   await erc1155.deployed();
   console.log("ERC1155 deployed at: ", erc1155.address);
 
   const Proxy = await ethers.getContractFactory("Proxy");
-  const proxy = await Proxy.deploy(erc1155.address);
+  const proxy = await Proxy.connect(deployer).deploy(erc1155.address);
   await proxy.deployed();
   console.log("Proxy deployed at: ", proxy.address);
 
   // DEPLOY ADMIN CONTRACT
   const BettingAdmin = await ethers.getContractFactory("BettingAdmin");
-  const bettingAdmin = await upgrades.deployProxy(BettingAdmin, [
+  const bettingAdmin = await upgrades.deployProxy(BettingAdmin.connect(deployer), [
     erc20Address, // token
     deployerAddress, // vaultAddress, // vault
     deployerAddress, // signerAddress, // signer
     proxy.address
   ])
   await bettingAdmin.deployed();
-  console.log("BettingAdmin deployed to:", bettingAdmin.address);
 
   // DEPLOY BETTING CONTRACT
   const Betting = await ethers.getContractFactory("BettingV2");
