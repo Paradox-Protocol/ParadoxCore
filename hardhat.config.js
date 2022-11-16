@@ -23,18 +23,18 @@ module.exports = {
       timeout: 10_0000
     },
     rinkeby: {
-      url: `https://goerli.infura.io/v3/fc70825df4b84964bba9cc957c4fb8b4`,
+      url: ``,
       accounts: [process.env.PRIVATE_KEY]
     },
     goerli: {
-      url: `https://goerli.infura.io/v3/fc70825df4b84964bba9cc957c4fb8b4`,
+      url: ``,
       accounts: [process.env.PRIVATE_KEY]
     }
   },
   etherscan: {
     apiKey: {
       rinkeby: "",
-      goerli: "HEYY527RC5PFIHJR56UNASIDZNMCCF5MFG"
+      goerli: ""
     }
   }
 };

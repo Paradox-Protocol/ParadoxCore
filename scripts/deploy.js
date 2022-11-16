@@ -6,18 +6,18 @@ const { impersonateAccount, stopImpersonatingAccount } = require("../utils/signe
 const TEST_DEPLOYER = "0x8A974Aa04c34AC66ac16F2c7112aEDDaDB4F87A1";
 
 // addressess of gnosis multi sigs for contract roles
-const multiSigAddress = "0x2bc95003C1f398aDA1eD0BbC9FE569a5489a0bb3";
-const gameAdminAddress = "0x44511a60E20E26e4B306AA250F334195B85d32B7";
-const adminAddress = "0x4dD35E0b1bE268C6f3A38eb9cACfCB22062b0Bc6";
+const multiSigAddress = "";
+const gameAdminAddress = "";
+const adminAddress = "";
 
 // address of ERC 20 token contract is using
-const usdcAddress = "0x07865c6E87B9F70255377e024ace6630C1Eaa37F";
+const usdcAddress = "";
 
 // address of the contract verasigner
-const signerAddress = "0x4dD35E0b1bE268C6f3A38eb9cACfCB22062b0Bc6";
+const signerAddress = "";
 
 // address of the vault
-const vaultAddress = "0x3BB55aAfb1D3b8e8583cdA5935F0610e652feE2e";
+const vaultAddress = "";
 
 //// ROLES
 const MULTISIG_ROLE = "0xa5a0b70b385ff7611cd3840916bd08b10829e5bf9e6637cf79dd9a427fc0e2ab"
@@ -88,7 +88,7 @@ async function main(
   await betting.deployed();
   console.log("Betting deployed to:", betting.address);
   console.log("");
-  
+
   // UPDATE ROLES
   await bettingAdmin.grantRole(MULTISIG_ROLE, deployerAddress);
   console.log('MULTISIG_ROLE GRANTED');
