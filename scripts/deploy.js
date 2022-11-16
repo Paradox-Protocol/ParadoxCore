@@ -3,6 +3,8 @@ const { mintEth } = require("../utils/mint");
 const { impersonateAccount, stopImpersonatingAccount } = require("../utils/signer");
 
 //// ADDRESSES
+const testDeployer = "0x8A974Aa04c34AC66ac16F2c7112aEDDaDB4F87A1";
+
 // addressess of gnosis multi sigs for contract roles
 const multiSigAddress = "0x2bc95003C1f398aDA1eD0BbC9FE569a5489a0bb3";
 const gameAdminAddress = "0x44511a60E20E26e4B306AA250F334195B85d32B7";
@@ -44,7 +46,7 @@ async function main(
   let deployer;
   let deployerAddress;
   if (impersonate) {
-    deployerAddress = "0x8A974Aa04c34AC66ac16F2c7112aEDDaDB4F87A1"
+    deployerAddress = testDeployer;
     deployer = await impersonateAccount(deployerAddress)
   } else {
     [deployer] = await ethers.getSigners();
