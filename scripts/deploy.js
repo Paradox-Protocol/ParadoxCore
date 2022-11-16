@@ -2,6 +2,9 @@ const { ethers, upgrades } = require("hardhat");
 const { mintEth } = require("../utils/mint");
 const { impersonateAccount, stopImpersonatingAccount } = require("../utils/signer");
 
+const MULTISIG_ROLE = "0xa5a0b70b385ff7611cd3840916bd08b10829e5bf9e6637cf79dd9a427fc0e2ab"
+const GAME_ADMIN_ROLE = "0x9b7946abd96dccbe6cfc6cc2c13300ab429d93e16fa72dc459eeccda73817f08"
+
 /**
  * Deploy betting & admin.
  * For local deployments, use `impersonate = true`.
@@ -42,6 +45,11 @@ async function main(
     bettingAdmin.address
   ]);
   await betting.deployed();
+
+  await bettingAdmin.grantRole(MULTISIG_ROLE, multiSigAddress);
+  console.log('MULTISIG_ROLE GRANTED');
+  await bettingAdmin.grantRole(GAME_ADMIN_ROLE, gameAdminAddress);
+  console.log('GAME_ADMIN_ROLE GRANTED');
 
   console.log("BettingAdmin deployed to:", bettingAdmin.address);
   console.log("Deployed by:", await bettingAdmin.signer.getAddress());
