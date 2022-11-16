@@ -3,7 +3,7 @@ const { mintEth } = require("../utils/mint");
 const { impersonateAccount, stopImpersonatingAccount } = require("../utils/signer");
 
 //// ADDRESSES
-const testDeployer = "0x8A974Aa04c34AC66ac16F2c7112aEDDaDB4F87A1";
+const TEST_DEPLOYER = "0x8A974Aa04c34AC66ac16F2c7112aEDDaDB4F87A1";
 
 // addressess of gnosis multi sigs for contract roles
 const multiSigAddress = "0x2bc95003C1f398aDA1eD0BbC9FE569a5489a0bb3";
@@ -44,11 +44,11 @@ async function main(
   let deployer;
   let deployerAddress;
   if (impersonate) {
-    deployerAddress = testDeployer;
+    deployerAddress = TEST_DEPLOYER;
     deployer = await impersonateAccount(deployerAddress);
     await network.provider.send("hardhat_setBalance", [
       deployerAddress,
-      "0xDE0B6B3A7640000",
+      "0xDE0B6B3A7640000", // 1 ETH
     ]);
   } else {
     [deployer] = await ethers.getSigners();
@@ -57,7 +57,6 @@ async function main(
 
   console.log("Deploying Paradox admin for erc20Address", erc20Address);
   console.log("Deployer is", deployerAddress, "\n");
-
 
   // DEPLOY PROXY AND CLONE FOR ERC1155 MINTER
   const ERC1155PresetMinterPauser = await ethers.getContractFactory("ERC1155PresetMinterPauser");
@@ -79,14 +78,17 @@ async function main(
     proxy.address
   ])
   await bettingAdmin.deployed();
+  console.log("BettingAdmin deployed to:", bettingAdmin.address);
 
   // DEPLOY BETTING CONTRACT
   const Betting = await ethers.getContractFactory("BettingV2");
-  const betting = await upgrades.deployProxy(Betting, [
+  const betting = await upgrades.deployProxy(Betting.connect(deployer), [
     bettingAdmin.address
   ]);
   await betting.deployed();
-
+  console.log("Betting deployed to:", betting.address);
+  console.log("");
+  
   // UPDATE ROLES
   await bettingAdmin.grantRole(MULTISIG_ROLE, deployerAddress);
   console.log('MULTISIG_ROLE GRANTED');
@@ -95,7 +97,6 @@ async function main(
   await bettingAdmin.grantRole(ADMIN_ROLE, deployerAddress);
   console.log('ADMIN_ROLE GRANTED');
 
-  console.log("BettingAdmin deployed to:", bettingAdmin.address);
   console.log("Deployed by:", await bettingAdmin.signer.getAddress());
   console.log("");
 
