@@ -46,9 +46,9 @@ async function main(
   ]);
   await betting.deployed();
 
-  await bettingAdmin.grantRole(MULTISIG_ROLE, multiSigAddress);
+  await bettingAdmin.grantRole(MULTISIG_ROLE, deployerAddress);
   console.log('MULTISIG_ROLE GRANTED');
-  await bettingAdmin.grantRole(GAME_ADMIN_ROLE, gameAdminAddress);
+  await bettingAdmin.grantRole(GAME_ADMIN_ROLE, deployerAddress);
   console.log('GAME_ADMIN_ROLE GRANTED');
 
   console.log("BettingAdmin deployed to:", bettingAdmin.address);
