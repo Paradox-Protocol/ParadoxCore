@@ -5,11 +5,15 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "./common/Storage.sol";
 import "./interfaces/IERC1155PresetMinterPauser.sol";
 import "./interfaces/IBettingAdmin.sol";
 
 contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
+
+    using SafeERC20Upgradeable for IERC20Upgradeable;
+
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     // Minimum bet value. Currently user can place 0.01 USDC
     uint256 public constant MIN_BET = 1e4;
@@ -159,7 +163,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         _placeBet(player_, poolId_, teamId_, amount_, _commission);
 
         uint256 _netAmount = amount_ + _commission;
-        erc20Contract().transferFrom(msg.sender, address(this), _netAmount);
+        erc20Contract().safeTransferFrom(msg.sender, address(this), _netAmount);
         // Mint team tokens
         pool.mintContract.mint(player_, teamId_, amount_, "") ;
 
@@ -187,7 +191,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         // Burn all supply of user after claiming winning
         pool.mintContract.burnBatch(msg.sender, pool.winners, balances);
-        erc20Contract().transfer(player_, _winningAmount);
+        erc20Contract().safeTransfer(player_, _winningAmount);
 
         emit WinningsClaimed(poolId_, player_, _winningAmount);
     }
@@ -212,7 +216,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         _refundClaimed(player, poolId_, _refundAmount);
 
         pool.mintContract.burnBatch(player, _tokens, balances);
-        erc20Contract().transfer(player, _refundAmount);
+        erc20Contract().safeTransfer(player, _refundAmount);
 
         emit RefundClaimed(poolId_, player, _refundAmount);
     }
@@ -230,7 +234,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     //     require(balance > 0, "Betting: No refund to claim"); 
         
     //     pool.mintContract.burn(player, teamId_, balance);
-    //     erc20Contract().transfer(player, balance);
+    //     erc20Contract().safeTransfer(player, balance);
 
     //     emit TeamRefundClaimed(poolId_, player, balance);
     // }
@@ -251,7 +255,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         claimedCommissions[player][poolId_] = _commissionAmount;
         _commissionClaimed(player, poolId_, _commissionAmount);
 
-        erc20Contract().transfer(player, _commissionAmount);
+        erc20Contract().safeTransfer(player, _commissionAmount);
 
         emit CommissionClaimed(poolId_, player, _commissionAmount);
     }
@@ -277,7 +281,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         claimedCommissions[player][poolId_] = amount_;
         _commissionClaimed(player, poolId_, amount_);
 
-        erc20Contract().transfer(player, amount_);
+        erc20Contract().safeTransfer(player, amount_);
 
         emit CommissionClaimed(poolId_, player, amount_);
     }
@@ -285,13 +289,13 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     function transferCommissionToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
         Pool memory pool = getPool(poolId_);
         require(amount_ <= pool.totalCommissions, "Betting: Transfer exceeds total commissions");
-        erc20Contract().transfer(vault(), amount_);
+        erc20Contract().safeTransfer(vault(), amount_);
     }
 
     function transferPayoutToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
         Pool memory pool = getPool(poolId_);
         require(amount_ <= pool.totalAmount, "Betting: Transfer exceeds total payouts");
-        erc20Contract().transfer(vault(), amount_);
+        erc20Contract().safeTransfer(vault(), amount_);
     }
 
     // Stats functions
