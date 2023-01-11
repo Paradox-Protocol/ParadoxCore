@@ -28,6 +28,8 @@ contract ERC1155PresetMinterPauser is Context, Initializable, AccessControlEnume
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
+    string public constant name = "Paradox Mint Contract";
+
     /**
      * @dev Grants `DEFAULT_ADMIN_ROLE`, `MINTER_ROLE`, and `PAUSER_ROLE` to the account that
      * deploys the contract.
@@ -38,6 +40,7 @@ contract ERC1155PresetMinterPauser is Context, Initializable, AccessControlEnume
     function initialize(address defaultAdmin_, address minter_, string memory uri) public initializer {
         _setupRole(DEFAULT_ADMIN_ROLE, defaultAdmin_);
         _setupRole(MINTER_ROLE, minter_);
+        _setURI(uri);
     }
 
     /**
