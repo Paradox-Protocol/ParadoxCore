@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.7.0 <0.9.0;
 import "../common/Storage.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 
 interface IBettingAdmin {
     function getPool(uint256 poolId_) external view returns(Storage.Pool memory);
+    function getPools(uint256[] memory poolIds_) external view returns(Storage.Pool[] memory);
     function getPoolTeam(uint256 poolId_, uint256 teamId_) external view returns(Storage.Team memory);
     function getPoolTeams(uint256 poolId_) external view returns(Storage.Team[] memory);
     function erc20Contract() external view returns(IERC20Upgradeable);

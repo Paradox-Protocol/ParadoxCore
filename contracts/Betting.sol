@@ -1,19 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.7.0 <0.9.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./common/Storage.sol";
 import "./interfaces/IERC1155PresetMinterPauser.sol";
 import "./interfaces/IBettingAdmin.sol";
 
-contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
-
-    using SafeERC20Upgradeable for IERC20Upgradeable;
-
+contract Betting is Storage, ReentrancyGuardUpgradeable, UUPSUpgradeable, AccessControlUpgradeable {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     // Minimum bet value. Currently user can place 0.01 USDC
     uint256 public constant MIN_BET = 1e4;
@@ -54,6 +51,8 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     event RefundClaimed(uint256 indexed poolId, address indexed player, uint256 amount);
     event CommissionClaimed(uint256 indexed poolId, address indexed player, uint256 amount);    
     event TeamRefundClaimed(uint256 indexed poolId, address indexed player, uint256 amount);
+    event WinningsClaimedBatch(address indexed winner, uint256[] poolIds, uint256 totalWinning);
+    event CommissionsClaimedBatch(address indexed player, uint256[] poolIds, uint256 totalCommission);
 
     // poolId should be > 0 and less than total number of pools
     modifier validPool(uint256 poolId_) {
@@ -76,6 +75,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     // Since we are using UUPS proxy, we cannot use contructor instead need to use this
     function initialize(address bettingAdmin_) public initializer {
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
 
         bettingAdmin = IBettingAdmin(bettingAdmin_);
 
@@ -94,6 +94,10 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
     function getPool(uint256 poolId_) public view returns(Pool memory) {
         return bettingAdmin.getPool(poolId_);
+    }
+
+    function getPools(uint256[] memory poolIds_) public view returns(Pool[] memory) {
+        return bettingAdmin.getPools(poolIds_);
     }
 
     function getPoolTeam(uint256 poolId_, uint256 teamId_) public view returns(Team memory) {
@@ -137,8 +141,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     // Commission, if applicable, is calculated on the amount_ and added to final deduction
     // amount_ + commission is transferred from user's balance to contract
     // user is minted amount_ ERC1155 tokens of type teamId_
-    // player_ is address that receives the bet
-    function placeBet(address player_, uint256 poolId_, uint256 teamId_, uint256 amount_) external validPool(poolId_) {
+    function placeBet(uint256 poolId_, uint256 teamId_, uint256 amount_) external validPool(poolId_) {
         Pool memory pool = getPool(poolId_);
         require(pool.status == PoolStatus.Running, "Betting: Pool status should be Running");
         require(amount_ >= MIN_BET, "Betting: Amount should be more than MIN_BET");
@@ -148,52 +151,83 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         require(team.status == TeamStatus.Created, "Betting: Team status should be Created");
 
         uint256 betId = bets.length;
-
+        address player = msg.sender;
         uint _commission = 0;
         // Update commission stats
         if (pool.totalBets > 0) {
             _commission = _calculateCommission(amount_);
-            poolCommission[poolId_][betId] = Commission(_commission, pool.totalAmount, player_);
+            poolCommission[poolId_][betId] = Commission(_commission, pool.totalAmount, player);
         }
 
         // console.log("netamount: %s, sender: %s", _netAmount, msg.sender);
-        bets.push(Bet(betId, poolId_, teamId_, amount_, player_, block.timestamp));
-        userBets[poolId_][player_].push(betId);
+        bets.push(Bet(betId, poolId_, teamId_, amount_, player, block.timestamp));
+        userBets[poolId_][player].push(betId);
         poolBets[poolId_].push(betId);
-        _placeBet(player_, poolId_, teamId_, amount_, _commission);
+        _placeBet(player, poolId_, teamId_, amount_, _commission);
 
         uint256 _netAmount = amount_ + _commission;
-        erc20Contract().safeTransferFrom(msg.sender, address(this), _netAmount);
+        erc20Contract().transferFrom(player, address(this), _netAmount);
         // Mint team tokens
-        pool.mintContract.mint(player_, teamId_, amount_, "") ;
+        pool.mintContract.mint(player, teamId_, amount_, "") ;
 
-        emit BetPlaced(poolId_, player_, teamId_, amount_);
+        emit BetPlaced(poolId_, player, teamId_, amount_);
     }
 
     // Allows user to claim payout against a poolId
     // Payout is only transferred if user has made a bet against winning team
-    // player_ is address that receives payment
-    function claimPayment(address player_, uint256 poolId_) external validPool(poolId_) {
+    function claimPayment(uint256 poolId_) external validPool(poolId_) {
         Pool memory pool = getPool(poolId_);
+        address winner = msg.sender;
 
-        address[] memory _player = _replicateAddress(player_, pool.winners.length);
+        address[] memory _player = _replicateAddress(winner, pool.winners.length);
         uint256[] memory balances = pool.mintContract.balanceOfBatch(_player, pool.winners);
 
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Decided");
+        require(claimedPayouts[winner][poolId_] == 0, "Betting: Payout already claimed"); 
         require(!pool.paymentDisabled, "Betting: Pool payment has been disabled");
 
-        uint256 _winningAmount = _totalAmountWon(player_, poolId_);
+        uint256 _winningAmount = _totalAmountWon(winner, poolId_);
         require(_winningAmount > 0, "Betting: No payout to claim"); 
         require(_winningAmount <= pool.totalAmount, "Betting: Payout exceeds total amount");
 
-        claimedPayouts[player_][poolId_] = _winningAmount;
-        _payoutClaimed(player_, poolId_, _winningAmount);
-
+        claimedPayouts[winner][poolId_] = _winningAmount;
+        _payoutClaimed(winner, poolId_, _winningAmount);
         // Burn all supply of user after claiming winning
-        pool.mintContract.burnBatch(msg.sender, pool.winners, balances);
-        erc20Contract().safeTransfer(player_, _winningAmount);
+        pool.mintContract.burnBatch(winner, pool.winners, balances);        
+        erc20Contract().transfer(winner, _winningAmount);
+        
+        emit WinningsClaimed(poolId_, winner, _winningAmount);
+    }
 
-        emit WinningsClaimed(poolId_, player_, _winningAmount);
+    // Allows user to claim payout against a poolId
+    // Payout is only transferred if user has made a bet against winning team
+    function claimPaymentBatch(uint256[] memory poolIds_) external nonReentrant {
+        Pool[] memory pools = getPools(poolIds_);
+        address winner = msg.sender;
+
+        uint256 _totalBatchWinnings = 0;
+        for (uint256 i = 0; i < pools.length; i++) {
+            Pool memory pool = pools[i];
+            require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Decided");
+            require(claimedPayouts[winner][pool.id] == 0, "Betting: Payout already claimed"); 
+            require(!pool.paymentDisabled, "Betting: Pool payment has been disabled");
+
+            address[] memory _player = _replicateAddress(winner, pool.winners.length);
+            uint256[] memory balances = pool.mintContract.balanceOfBatch(_player, pool.winners);
+
+            uint256 _winningAmount = _totalAmountWon(winner, pool.id);
+            require(_winningAmount > 0, "Betting: No payout to claim"); 
+            require(_winningAmount <= pool.totalAmount, "Betting: Payout exceeds total amount");
+
+            _totalBatchWinnings += _winningAmount;
+            claimedPayouts[winner][pool.id] = _winningAmount;
+            _payoutClaimed(winner, pool.id, _winningAmount);
+            // Burn all supply of user after claiming winning
+            pool.mintContract.burnBatch(winner, pool.winners, balances);        
+        }
+
+        erc20Contract().transfer(winner, _totalBatchWinnings);
+        emit WinningsClaimedBatch(winner, poolIds_, _totalBatchWinnings);
     }
 
     // Allows user to claim refund against a poolId
@@ -216,7 +250,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         _refundClaimed(player, poolId_, _refundAmount);
 
         pool.mintContract.burnBatch(player, _tokens, balances);
-        erc20Contract().safeTransfer(player, _refundAmount);
+        erc20Contract().transfer(player, _refundAmount);
 
         emit RefundClaimed(poolId_, player, _refundAmount);
     }
@@ -234,7 +268,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     //     require(balance > 0, "Betting: No refund to claim"); 
         
     //     pool.mintContract.burn(player, teamId_, balance);
-    //     erc20Contract().safeTransfer(player, balance);
+    //     erc20Contract().transfer(player, balance);
 
     //     emit TeamRefundClaimed(poolId_, player, balance);
     // }
@@ -255,7 +289,7 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         claimedCommissions[player][poolId_] = _commissionAmount;
         _commissionClaimed(player, poolId_, _commissionAmount);
 
-        erc20Contract().safeTransfer(player, _commissionAmount);
+        erc20Contract().transfer(player, _commissionAmount);
 
         emit CommissionClaimed(poolId_, player, _commissionAmount);
     }
@@ -269,33 +303,59 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
         require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Deciced");
         require(claimedCommissions[player][poolId_] == 0, "Betting: Commission already claimed");
-        require(!pool.commissionDisabled, "Betting: Pool commission has been disabled");
         require(amount_ > 0, "Betting: No commission to claim"); 
         require(amount_ <= pool.totalCommissions, "Betting: Payout exceeds total amount");
 
-        _verifySignature(player, poolId_, amount_, signedBlockNum_, signature_);
+        bytes32 _msgHash = getMessageHash(player, poolId_, amount_, signedBlockNum_);
+        _verifySignature(signature_, _msgHash);
         require(signedBlockNum_ <= block.number, "Signed block number must be older");
         require(signedBlockNum_ + 50 >= block.number, "Signature expired");
 
-        // console.log("Transfer amount: %s", amount_);
         claimedCommissions[player][poolId_] = amount_;
         _commissionClaimed(player, poolId_, amount_);
 
-        erc20Contract().safeTransfer(player, amount_);
+        erc20Contract().transfer(player, amount_);
 
         emit CommissionClaimed(poolId_, player, amount_);
+    }
+
+    // Allows user to claim payout against a poolId
+    // Payout is only transferred if user has made a bet against winning team
+    function claimCommissionWithSignatureBatch(uint256[] memory poolIds_, uint256[] memory amounts_, uint256 totalCommission_, uint256 signedBlockNum_, bytes memory signature_) external nonReentrant {
+        Pool[] memory pools = getPools(poolIds_);
+        address player = msg.sender;
+
+        for (uint256 i = 0; i < pools.length; i++) {
+            Pool memory pool = pools[i];
+            require(pool.status == PoolStatus.Decided, "Betting: Pool status should be Deciced");
+            require(claimedCommissions[player][pool.id] == 0, "Betting: Commission already claimed");
+            
+            // console.log("Transfer amount: %s", amount_);
+            claimedCommissions[player][pool.id] = amounts_[i];
+            _commissionClaimed(player, pool.id, amounts_[i]);
+        }
+
+        bytes32 _msgHash = getMessageHashBatch(player, poolIds_, amounts_, totalCommission_, signedBlockNum_);
+        _verifySignature(signature_, _msgHash);
+
+        require(signedBlockNum_ <= block.number, "Signed block number must be older");
+        require(signedBlockNum_ + 50 >= block.number, "Signature expired");
+        require(totalCommission_ > 0, "Betting: No commission to claim"); 
+
+        erc20Contract().transfer(player, totalCommission_);
+        emit CommissionsClaimedBatch(player, poolIds_, totalCommission_);
     }
 
     function transferCommissionToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
         Pool memory pool = getPool(poolId_);
         require(amount_ <= pool.totalCommissions, "Betting: Transfer exceeds total commissions");
-        erc20Contract().safeTransfer(vault(), amount_);
+        erc20Contract().transfer(vault(), amount_);
     }
 
     function transferPayoutToVault(uint256 poolId_, uint256 amount_) external onlyBettingAdmin {
         Pool memory pool = getPool(poolId_);
         require(amount_ <= pool.totalAmount, "Betting: Transfer exceeds total payouts");
-        erc20Contract().safeTransfer(vault(), amount_);
+        erc20Contract().transfer(vault(), amount_);
     }
 
     // Stats functions
@@ -481,16 +541,24 @@ contract Betting is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         );
     }
 
+    function getMessageHashBatch(address player_, uint256[] memory poolIds_, uint256[] memory amounts_, uint256 totalAmount_, uint256 signedBlockNum_) public pure returns(bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                player_,
+                poolIds_,
+                amounts_,
+                totalAmount_,
+                signedBlockNum_
+            )
+        );
+    }
+
     function _verifySignature(
-        address player_,
-        uint256 poolId_,
-        uint256 amount_,
-        uint256 signedBlockNum_,
-        bytes memory signature_
+        bytes memory signature_,
+        bytes32 msgHash_
     ) internal view {
-        bytes32 msgHash = getMessageHash(player_, poolId_, amount_, signedBlockNum_);
         bytes32 signedHash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", msgHash)
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", msgHash_)
         );
         require(
             recoverSigner(signedHash, signature_) == signer(),
