@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.7.0 <0.9.0;
 import "../interfaces/IERC1155PresetMinterPauser.sol";
 
 contract Storage {
@@ -9,7 +9,6 @@ contract Storage {
     // 1 - Running
     // 2 - Decided
     // 3 - Canceled
-    // 4 - Closed
     enum PoolStatus{ Created, Running, Decided, Canceled, Closed }
     // Team Statuses
     // 0 - Created
@@ -57,7 +56,7 @@ contract Storage {
         uint256 poolId;
         // team for which bet is placed
         uint256 teamId;
-        // Amount
+        // Amount 
         uint256 amount;
         // Participant address
         address player;

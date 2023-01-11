@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.7.0 <0.9.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -9,7 +9,6 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "../common/Storage.sol";
 import "../interfaces/IBetting.sol";
 import "../interfaces/IProxy.sol";
-import "hardhat/console.sol";
 
 contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     IERC20Upgradeable public erc20Contract;
@@ -34,7 +33,7 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     bytes32 public constant MULTISIG_ROLE = keccak256("MULTISIG_ROLE");
 
     // Mapping from poolid -> bet indexes placed against this pool
-    mapping (uint256 => uint256[]) public poolBets;
+    mapping (uint256 => uint256[]) public poolBets; 
 
     // Mapping from poolstatus -> poolId. Used to filter pools based on status
     mapping(uint256 => uint256) public poolStatus;
@@ -116,6 +115,17 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         emit PoolCreated(poolId, numberOfTeams_, startTime_);
     }
 
+    // Allows admin to add a new team to pool
+    function createTeam(uint256 poolId_, string memory team_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
+        Pool storage pool = pools[poolId_];
+        require(pool.status == PoolStatus.Created, "BettingAdmin: Pool status should be Created");
+
+        uint256 teamId_ = pool.numberOfTeams;
+        poolTeams[poolId_].push(Team(teamId_, team_, TeamStatus.Created, 0));
+        pool.numberOfTeams += 1;
+        emit TeamAdded(poolId_, teamId_);
+    }
+
     // Allows admin to cancel a pool making all pool proceeds including commission to be eligible for refund
     function cancelPool(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
@@ -127,7 +137,7 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     }
 
     // Allows admin to start a pool
-    function startPool(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+    function startPool(uint256 poolId_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
         require(pool.status == PoolStatus.Created, "BettingAdmin: Pool status should be Created");
 
@@ -137,7 +147,7 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     }
 
     // Allows admin to close a pool
-    function closePool(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+    function closePool(uint256 poolId_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
         require(pool.status == PoolStatus.Running, "BettingAdmin: Pool status should be Running");
 
@@ -172,6 +182,23 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         emit PoolGraded(poolId_, pool.winners);
     }
 
+    // Allows admin to update pool state
+    function updatePoolState(uint256 poolId_, PoolStatus status_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
+        Pool storage pool = pools[poolId_];
+        pool.status = status_;
+
+        emit PoolStateUpdated(poolId_, uint256(status_));
+    }
+
+    // Allows admin to update pool mint address
+    function updatePoolMintAddress(uint256 poolId_, address mintAddress_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
+        Pool storage pool = pools[poolId_];
+
+        require(pool.status == PoolStatus.Created, "BettingAdmin: Pool status should be Created");
+        require(mintAddress_ != address(0), "BettingAdmin: Zero mint address");
+        pool.mintContract = IERC1155PresetMinterPauser(mintAddress_);
+    }
+
     // Allows admin to transfer unclaimed commission to insurance vault
     function transferCommissionToVault(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
@@ -204,8 +231,20 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         emit PayoutTransferredToVault(poolId_, _unclaimedPayout);
     }
 
+    // Allows admin to refund a single team in pool, making all bets placed on that team only eligible for refund
+    // function refundTeam(uint256 poolId_, uint256 teamId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+    //     // Remove player from pool and issue refund
+    //     Pool storage pool = pools[poolId_];
+    //     require(pool.status == PoolStatus.Running, "BettingAdmin: Pool status should be Running");
+
+    //     Team storage team = poolTeams[poolId_][teamId_];
+    //     team.status = TeamStatus.Refunded;
+
+    //     emit TeamRemoved(poolId_, teamId_);
+    // }
+
     // Allows admin to update start time and duration of a pool
-    function updateStartTime(uint256 poolId_, uint256 startTime_, uint256 duration_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+    function updateStartTime(uint256 poolId_, uint256 startTime_, uint256 duration_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
         require(pool.status == PoolStatus.Created || pool.status == PoolStatus.Running, "BettingAdmin: Pool status should be Created or Running");
 
@@ -260,32 +299,32 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
     function betPlaced(address player_, uint256 poolId_, uint256 teamId_, uint256 amount_, uint256 commission_) external onlyBetting returns (bool) {
         Pool storage pool = pools[poolId_];
-
+        
         // Update pool statistics
         pool.totalAmount += amount_;
         pool.totalBets += 1;
         pool.totalCommissions += commission_;
 
         poolTeams[poolId_][teamId_].totalAmount += amount_;
-        return true;
+        return true; 
     }
 
-    function payoutClaimed(address player_, uint256 poolId_, uint256 amount_) external onlyBetting returns (bool) {
+    function payoutClaimed(address player_, uint256 poolId_, uint256 amount_) external onlyBetting returns (bool) { 
         Pool storage pool = pools[poolId_];
         pool.payoutClaimed += amount_;
 
         return true;
     }
 
-    function commissionClaimed(address player_, uint256 poolId_, uint256 amount_) external onlyBetting returns (bool) {
+    function commissionClaimed(address player_, uint256 poolId_, uint256 amount_) external onlyBetting returns (bool) { 
         Pool storage pool = pools[poolId_];
         pool.commissionsClaimed += amount_;
 
         return true;
     }
 
-    function refundClaimed(address player_, uint256 poolId_, uint256 amount_) external onlyBetting returns (bool) {
-
+    function refundClaimed(address player_, uint256 poolId_, uint256 amount_) external onlyBetting returns (bool) { 
+       
     }
 
     // Returns all teams of a pool
@@ -295,6 +334,14 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
 
     function getTotalPools() external view returns(uint256) {
         return pools.length;
+    }
+
+    function getPools(uint256[] memory poolIds_) external view returns(Storage.Pool[] memory) {
+        Pool[] memory _pools = new Pool[](poolIds_.length);
+        for (uint256 i = 0; i < poolIds_.length; ++i) {
+            _pools[i] = pools[poolIds_[i]];
+        }
+        return _pools;
     }
 
     function getPool(uint256 poolId_) external view returns (Pool memory) {
