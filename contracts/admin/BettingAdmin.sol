@@ -127,7 +127,7 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
     }
 
     // Allows admin to start a pool
-    function startPool(uint256 poolId_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+    function startPool(uint256 poolId_) external onlyRole(GAME_ADMIN_ROLE) validPool(poolId_) {
         Pool storage pool = pools[poolId_];
         require(pool.status == PoolStatus.Created, "BettingAdmin: Pool status should be Created");
 
@@ -170,6 +170,14 @@ contract BettingAdmin is Storage, UUPSUpgradeable, AccessControlUpgradeable {
         pool.winners = winnerIds_;
 
         emit PoolGraded(poolId_, pool.winners);
+    }
+
+    // Allows admin to update pool state
+    function updatePoolState(uint256 poolId_, PoolStatus status_) external onlyRole(MULTISIG_ROLE) validPool(poolId_) {
+        Pool storage pool = pools[poolId_];
+        pool.status = status_;
+
+        emit PoolStateUpdated(poolId_, uint256(status_));
     }
 
     // Allows admin to transfer unclaimed commission to insurance vault
