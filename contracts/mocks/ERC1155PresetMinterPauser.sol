@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.7.0 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
@@ -28,8 +28,6 @@ contract ERC1155PresetMinterPauser is Context, Initializable, AccessControlEnume
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    string public constant name = "Paradox Mint Contract";
-
     /**
      * @dev Grants `DEFAULT_ADMIN_ROLE`, `MINTER_ROLE`, and `PAUSER_ROLE` to the account that
      * deploys the contract.
@@ -37,10 +35,10 @@ contract ERC1155PresetMinterPauser is Context, Initializable, AccessControlEnume
     constructor(string memory uri) ERC1155(uri) {
     }
 
-    function initialize(address defaultAdmin_, address minter_, string memory uri) public initializer {
+    function initialize(address defaultAdmin_, address minter_, string memory uri_) public initializer {
         _setupRole(DEFAULT_ADMIN_ROLE, defaultAdmin_);
         _setupRole(MINTER_ROLE, minter_);
-        _setURI(uri);
+        _setURI(uri_);
     }
 
     /**
@@ -88,6 +86,12 @@ contract ERC1155PresetMinterPauser is Context, Initializable, AccessControlEnume
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
+    }
+
+    function setUri(string memory uri_) public virtual {
+        require(hasRole(MINTER_ROLE, _msgSender()), "ERC1155PresetMinterPauser: must have minter role to set uri");
+
+        _setURI(uri_);
     }
 
     function _beforeTokenTransfer(
